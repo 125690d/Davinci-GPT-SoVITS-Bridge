@@ -612,6 +612,37 @@ local function SynthesizeSpeech(baseUrl, text, textLang, refAudioPath, promptTex
 end
 
 
+-- 检查时间线上是否有指定名称的音频（允许帧数偏差）
+-- params:
+--   timeline : 时间线对象
+--   trackIndex : 音频轨道索引
+--   startFrame : 开始帧位置
+--   fileName : 要检查的文件名
+--   frameTolerance : 帧数容差（默认10帧）
+local function CheckAudioExistsOnTimeline(timeline, trackIndex, startFrame, fileName, frameTolerance)
+    if not timeline then return false end
+    frameTolerance = frameTolerance or 10  -- 默认10帧容差
+    
+    -- 获取音频轨道上的所有项
+    local ok, audioItems = pcall(function() return timeline:GetItemListInTrack("audio", trackIndex) end)
+    if not ok or not audioItems then return false end
+    
+    -- 检查每个音频项
+    for _, audioItem in ipairs(audioItems) do
+        -- 获取音频项的开始帧和名称
+        local audioStartFrame = audioItem:GetStart()
+        local audioName = audioItem:GetName()
+        
+        -- 检查是否在容差范围内且有相同名称
+        if audioName == fileName and math.abs(audioStartFrame - startFrame) <= frameTolerance then
+            log("时间线上已存在音频: " .. fileName .. " 在帧 " .. audioStartFrame .. " (容差: " .. frameTolerance .. "帧)")
+            return true
+        end
+    end
+    
+    return false
+end
+
 -- 设置 GPT 与 SoVITS 模型
 -- params:
 --   baseUrl : 服务地址，默认是 "http://127.0.0.1:9880"
@@ -777,7 +808,28 @@ function UIManager:StartGPT()
             local StartFrame = item:GetStart()
             local endFrame = item:GetEnd()
             local text = item:GetName()
-            local audio_file = itm.OutputPathEdit.Text .. text .. ".wav"
+            local FileName = text .. "_" .. prompt_lang .. ".wav"
+            local audio_file = itm.OutputPathEdit.Text .. FileName
+            -- 计算进度百分比，并限制为1位小数
+            local progressPercent = string.format("%.1f", (processed or 0) / (totalItems or 1) * 100)
+
+            -- 获取目标音频轨道
+            local targetTrack = 1  -- 默认第一轨
+            local trackCombo = findWidget(self.window, "TrackCombo")
+            if trackCombo and trackCombo.CurrentIndex >= 0 then
+                targetTrack = trackCombo.CurrentIndex + 1  -- 轨道从1开始
+            end
+            
+            -- 首先检查时间线上是否已经有相同名称的音频
+            local timelineAudioExists = CheckAudioExistsOnTimeline(timeline, targetTrack, StartFrame, FileName, 10)
+            
+            -- 如果时间线上已有音频，跳过处理
+            if timelineAudioExists then
+                log("时间线上已存在音频 ", FileName, ",跳过字幕: ", text)
+                processed = processed + 1
+                itm.ProgressLabel.Text = "已生成" .. progressPercent .. "%,时间线音频已存在，跳过:" .. text
+                goto continue  -- 跳过这个字幕项的处理
+            end
             
             -- 检查音频文件是否已存在  使用 达芬奇 接口尝试导入
             local fileExists = false
@@ -792,8 +844,7 @@ function UIManager:StartGPT()
             end
             
             -- 打印字幕信息
-            -- 计算进度百分比，并限制为1位小数
-            local progressPercent = string.format("%.1f", (processed or 0) / (totalItems or 1) * 100)
+            
             log(string.format("字幕轨道 %d: 开始帧 %d, 结束帧 %d, 内容: %s", TrackIndex, StartFrame, endFrame, text))
             
             local success = false
@@ -827,13 +878,6 @@ function UIManager:StartGPT()
                     local clip_props = audio_clip:GetClipProperty()
                     local duration = tonumber(clip_props["Duration"]) or 3.0
                     
-                    -- 获取目标音频轨道（从用户选择的轨道）
-                    local targetTrack = 1  -- 默认第一轨
-                    local trackCombo = findWidget(self.window, "TrackCombo")
-                    if trackCombo and trackCombo.CurrentIndex >= 0 then
-                        targetTrack = trackCombo.CurrentIndex + 1  -- 轨道从1开始
-                    end
-                    
                     -- 使用 AppendToTimeline 方法精确插入音频到时间线
                     -- 创建子剪辑配置，精确对齐字幕开始时间
                     local subClip = {
@@ -858,6 +902,7 @@ function UIManager:StartGPT()
             else
                 log("处理失败: ", text)
             end
+            ::continue::
         end
     end
     itm.ProgressLabel.Text = "就绪！"
