@@ -37,6 +37,12 @@ local LanguageTextMap = {
     "多语种混合(粤语)"
 }
 
+-- 同音字替换映射表(主要影响输入GPTSoVITS的输入内容)
+local HomophoneMap = {
+    ["GPT-SoVITS"] = "G P T",
+    ["AI"] = "诶唉"
+}
+
 local TempFolderName = "GPTSoVTTSTemp"
 local ConfigFileName = "Config.txt"
 local EnablePrintLog = false
@@ -80,6 +86,28 @@ local function SafeGetProjectAndTimeline()
     local ok3, timeline = pcall(function() return proj:GetCurrentTimeline() end)
     if not ok3 then timeline = nil end
     return proj, timeline
+end
+
+-- 同音字替换函数（不区分大小写）
+local function ReplaceHomophones(text)
+    if not text or text == "" then return text end
+    if not HomophoneMap or next(HomophoneMap) == nil then return text end
+    
+    local result = text
+    for original, replacement in pairs(HomophoneMap) do
+        -- 创建不区分大小写的模式
+        local pattern = ""
+        for i = 1, #original do
+            local char = original:sub(i, i)
+            if char:match("%a") then  -- 如果是字母字符
+                pattern = pattern .. "[" .. char:lower() .. char:upper() .. "]"
+            else
+                pattern = pattern .. char:gsub("([%%%+%-%*%?%[%]%^%$%(%)%.])", "%%%1")  -- 转义特殊字符
+            end
+        end
+        result = string.gsub(result, pattern, replacement)
+    end
+    return result
 end
 
 ----------------------路径函数----------------------
@@ -853,7 +881,7 @@ function UIManager:StartGPT()
                 itm.ProgressLabel.Text = "已生成" .. progressPercent .. "%,当前正在合成:" .. text
                 success = SynthesizeSpeech(
                     RequestURL,
-                    text,
+                    ReplaceHomophones(text),
                     text_lang,
                     itm.PromptAudioEdit.Text,
                     itm.PromptTextEdit.Text,
