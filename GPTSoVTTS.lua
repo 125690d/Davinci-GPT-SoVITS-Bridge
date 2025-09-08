@@ -37,10 +37,11 @@ local LanguageTextMap = {
     "多语种混合(粤语)"
 }
 
--- 同音字替换映射表(主要影响输入GPTSoVITS的输入内容)
+-- 同音替换映射表(主要影响输入GPTSoVITS的输入内容)
 local HomophoneMap = {
     ["GPT-SoVITS"] = "G P T",
-    ["AI"] = "诶唉"
+    ["AI"] = "诶唉",
+    ["UI"] = "优唉"
 }
 
 local TempFolderName = "GPTSoVTTSTemp"
@@ -88,7 +89,7 @@ local function SafeGetProjectAndTimeline()
     return proj, timeline
 end
 
--- 同音字替换函数（不区分大小写）
+-- 同音替换函数（不区分大小写）
 local function ReplaceHomophones(text)
     if not text or text == "" then return text end
     if not HomophoneMap or next(HomophoneMap) == nil then return text end
