@@ -7,6 +7,8 @@
 
 ## 如何使用
 
+发布在Bilibili的教学[**视频**](https://www.bilibili.com/video/BV1eSYFzREEe/)
+
 将`GPTSoV.lua`复制到如下目录中(也可以创建一个GPTSoVTTS文件夹然后再放进去)
 
 ```
